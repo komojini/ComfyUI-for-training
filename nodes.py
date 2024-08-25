@@ -818,15 +818,22 @@ class UNETLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { "unet_name": (folder_paths.get_filename_list("unet"), ),
+                              "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e5m2"],)
                              }}
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_unet"
 
     CATEGORY = "advanced/loaders"
 
-    def load_unet(self, unet_name):
+    def load_unet(self, unet_name, weight_dtype):
+        dtype = None
+        if weight_dtype == "fp8_e4m3fn":
+            dtype = torch.float8_e4m3fn
+        elif weight_dtype == "fp8_e5m2":
+            dtype = torch.float8_e5m2
+
         unet_path = folder_paths.get_full_path("unet", unet_name)
-        model = comfy.sd.load_unet(unet_path)
+        model = comfy.sd.load_unet(unet_path, dtype=dtype)
         return (model,)
 
 class CLIPLoader:
@@ -1845,6 +1852,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "StyleModelLoader": "Load Style Model",
     "CLIPVisionLoader": "Load CLIP Vision",
     "UpscaleModelLoader": "Load Upscale Model",
+    "UNETLoader": "Load Diffusion Model",
     # Conditioning
     "CLIPVisionEncode": "CLIP Vision Encode",
     "StyleModelApply": "Apply Style Model",
@@ -2040,6 +2048,7 @@ def init_builtin_extra_nodes():
         "nodes_gits.py",
         "nodes_controlnet.py",
         "nodes_hunyuan.py",
+        "nodes_flux.py",
     ]
 
     import_failed = []

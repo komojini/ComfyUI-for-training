@@ -19,3 +19,12 @@ venv/
 /user/
 *.log
 web_custom_versions/
+
+logs/
+*.log
+*.log.*
+
+output/
+
+wandb/
+.venv/

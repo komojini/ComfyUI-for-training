@@ -26,7 +26,7 @@ class FluxParams:
     num_heads: int
     depth: int
     depth_single_blocks: int
-    axes_dim: list[int]
+    axes_dim: list
     theta: int
     qkv_bias: bool
     guidance_embed: bool
@@ -92,7 +92,7 @@ class Flux(nn.Module):
         txt_ids: Tensor,
         timesteps: Tensor,
         y: Tensor,
-        guidance: Tensor | None = None,
+        guidance: Tensor = None,
     ) -> Tensor:
         if img.ndim != 3 or txt.ndim != 3:
             raise ValueError("Input img and txt tensors must have 3 dimensions.")
@@ -124,13 +124,21 @@ class Flux(nn.Module):
 
     def forward(self, x, timestep, context, y, guidance, **kwargs):
         bs, c, h, w = x.shape
-        img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+        patch_size = 2
+        pad_h = (patch_size - h % 2) % patch_size
+        pad_w = (patch_size - w % 2) % patch_size
 
-        img_ids = torch.zeros((h // 2, w // 2, 3), device=x.device, dtype=x.dtype)
-        img_ids[..., 1] = img_ids[..., 1] + torch.arange(h // 2, device=x.device, dtype=x.dtype)[:, None]
-        img_ids[..., 2] = img_ids[..., 2] + torch.arange(w // 2, device=x.device, dtype=x.dtype)[None, :]
+        x = torch.nn.functional.pad(x, (0, pad_w, 0, pad_h), mode='circular')
+
+        img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch_size, pw=patch_size)
+
+        h_len = ((h + (patch_size // 2)) // patch_size)
+        w_len = ((w + (patch_size // 2)) // patch_size)
+        img_ids = torch.zeros((h_len, w_len, 3), device=x.device, dtype=x.dtype)
+        img_ids[..., 1] = img_ids[..., 1] + torch.linspace(0, h_len - 1, steps=h_len, device=x.device, dtype=x.dtype)[:, None]
+        img_ids[..., 2] = img_ids[..., 2] + torch.linspace(0, w_len - 1, steps=w_len, device=x.device, dtype=x.dtype)[None, :]
         img_ids = repeat(img_ids, "h w c -> b (h w) c", b=bs)
 
         txt_ids = torch.zeros((bs, context.shape[1], 3), device=x.device, dtype=x.dtype)
         out = self.forward_orig(img, img_ids, context, txt_ids, timestep, y, guidance)
-        return rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
+        return rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h_len, w=w_len, ph=2, pw=2)[:,:,:h,:w]
